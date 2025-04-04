@@ -1,6 +1,6 @@
 use wasi::clocks::monotonic_clock;
 use wasi::io::poll::{self, Pollable};
-use wasi::io::streams::{ InputStream, OutputStream };
+use wasi::io::streams::{ InputStream, OutputStream, StreamError };
 use wasi::random::random;
 use wasi::sockets::network::{
     ErrorCode, IpAddress, IpAddressFamily, IpSocketAddress,
@@ -194,4 +194,25 @@ pub fn generate_random_u16(range: Range<u16>) -> u16 {
     let end = range.end as u64;
     let port = start + (random::get_random_u64() % (end - start));
     port as u16
+}
+
+pub fn blocking_write_util(stream: &OutputStream, mut bytes: &[u8]) -> Result<(), StreamError> {
+    let timeout = monotonic_clock::subscribe_duration(TIMEOUT_NS);
+    let pollable = stream.subscribe();
+
+    while !bytes.is_empty() {
+        block_until(&pollable, &timeout).expect("write timed out");
+
+        let permit = stream.check_write()?;
+
+        let len = bytes.len().min(permit as usize);
+        let (chunk, rest) = bytes.split_at(len);
+
+        stream.write(chunk)?;
+
+        stream.blocking_flush()?;
+
+        bytes = rest;
+    }
+    Ok(())
 }
