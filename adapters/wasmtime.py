@@ -26,5 +26,5 @@ PROG_ARGS = args.arg
 ENV_ARGS = [j for i in args.env for j in ["--env", i]]
 DIR_ARGS = [j for i in args.dir for j in ["--dir", i]]
 
-r = subprocess.run(WASMTIME + ["-S", "allow-ip-name-lookup=y"] + ENV_ARGS + DIR_ARGS + [TEST_FILE] + PROG_ARGS)
+r = subprocess.run(WASMTIME + ["-S", "allow-ip-name-lookup=y", "-S", "tcp=y", "-S", "inherit-network=y"] + ENV_ARGS + DIR_ARGS + [TEST_FILE] + PROG_ARGS)
 sys.exit(r.returncode)
