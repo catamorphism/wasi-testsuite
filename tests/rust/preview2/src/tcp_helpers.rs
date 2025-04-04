@@ -8,6 +8,8 @@ use wasi::sockets::network::{
 };
 use wasi::sockets::tcp::TcpSocket;
 use wasi::sockets::tcp_create_socket;
+use wasi::sockets::udp::UdpSocket;
+use wasi::sockets::udp_create_socket;
 use std::ops::Range;
 
 const TIMEOUT_NS: u64 = 1_000_000_000;
@@ -43,8 +45,30 @@ pub fn tcp_socket_new(address_family: IpAddressFamily) -> Result<TcpSocket, Erro
     tcp_create_socket::create_tcp_socket(address_family)
 }
 
+pub fn udp_socket_new(address_family: IpAddressFamily) -> Result<UdpSocket, ErrorCode> {
+    udp_create_socket::create_udp_socket(address_family)
+}
+
 pub fn blocking_bind(
     sock: &TcpSocket,
+    network: &Network,
+    local_address: IpSocketAddress,
+) -> Result<(), ErrorCode> {
+    let timeout = monotonic_clock::subscribe_duration(TIMEOUT_NS);
+    let sub = sock.subscribe();
+
+    sock.start_bind(&network, local_address)?;
+
+    loop {
+        match sock.finish_bind() {
+            Err(ErrorCode::WouldBlock) => block_until(&sub, &timeout)?,
+            result => return result,
+        }
+    }
+}
+
+pub fn blocking_bind_udp(
+    sock: &UdpSocket,
     network: &Network,
     local_address: IpSocketAddress,
 ) -> Result<(), ErrorCode> {
