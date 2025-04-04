@@ -196,6 +196,17 @@ pub fn generate_random_u16(range: Range<u16>) -> u16 {
     port as u16
 }
 
+pub fn blocking_read_to_end(stream: &InputStream) -> Result<Vec<u8>, wasi::io::error::Error> {
+    let mut data = vec![];
+    loop {
+        match stream.blocking_read(1024 * 1024) {
+            Ok(chunk) => data.extend(chunk),
+            Err(StreamError::Closed) => return Ok(data),
+            Err(StreamError::LastOperationFailed(e)) => return Err(e),
+        }
+    }
+}
+
 pub fn blocking_write_util(stream: &OutputStream, mut bytes: &[u8]) -> Result<(), StreamError> {
     let timeout = monotonic_clock::subscribe_duration(TIMEOUT_NS);
     let pollable = stream.subscribe();
