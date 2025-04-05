@@ -85,6 +85,13 @@ pub fn blocking_bind_udp(
     }
 }
 
+pub fn blocking_bind_unspecified(sock: &UdpSocket, network: &Network) -> Result<(), ErrorCode> {
+    let ip = new_unspecified(sock.address_family());
+    let port = 0;
+
+    blocking_bind_udp(sock, network, ip_socket_address_new(ip, port))
+}
+
 pub fn blocking_listen(sock: &TcpSocket) -> Result<(), ErrorCode> {
     let timeout = monotonic_clock::subscribe_duration(TIMEOUT_NS);
     let sub = sock.subscribe();
@@ -208,6 +215,30 @@ impl PartialEq for IpAddressEq {
         match (self, other) {
             (IpAddressEq(IpAddress::Ipv4(left)), IpAddressEq(IpAddress::Ipv4(right))) => left == right,
             (IpAddressEq(IpAddress::Ipv6(left)), IpAddressEq(IpAddress::Ipv6(right))) => left == right,
+            _ => false,
+        }
+    }
+}
+
+fn ipv4_socket_address_eq(this: &Ipv4SocketAddress, other: &Ipv4SocketAddress) -> bool {
+    this.port == other.port && this.address == other.address
+}
+
+fn ipv6_socket_address_eq(this: &Ipv6SocketAddress, other: &Ipv6SocketAddress) -> bool {
+    this.port == other.port
+        && this.flow_info == other.flow_info
+        && this.address == other.address
+        && this.scope_id == other.scope_id
+}
+
+#[derive(Debug)]
+pub struct IpSocketAddressEq(pub IpSocketAddress);
+
+impl PartialEq for IpSocketAddressEq {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (IpSocketAddressEq(IpSocketAddress::Ipv4(l0)), IpSocketAddressEq(IpSocketAddress::Ipv4(r0))) => ipv4_socket_address_eq(l0, r0),
+            (IpSocketAddressEq(IpSocketAddress::Ipv6(l0)), IpSocketAddressEq(IpSocketAddress::Ipv6(r0))) => ipv6_socket_address_eq(l0, r0),
             _ => false,
         }
     }
