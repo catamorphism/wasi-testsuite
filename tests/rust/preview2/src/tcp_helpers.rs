@@ -8,7 +8,8 @@ use wasi::sockets::network::{
 };
 use wasi::sockets::tcp::TcpSocket;
 use wasi::sockets::tcp_create_socket;
-use wasi::sockets::udp::UdpSocket;
+use wasi::sockets::udp::{ IncomingDatagram, IncomingDatagramStream,
+    OutgoingDatagram, OutgoingDatagramStream, UdpSocket };
 use wasi::sockets::udp_create_socket;
 use std::ops::Range;
 
@@ -281,4 +282,55 @@ pub fn blocking_write_util(stream: &OutputStream, mut bytes: &[u8]) -> Result<()
         bytes = rest;
     }
     Ok(())
+}
+
+fn blocking_check_send(stream: &OutgoingDatagramStream, timeout: &Pollable) -> Result<u64, ErrorCode> {
+    let sub = stream.subscribe();
+
+    loop {
+        match stream.check_send() {
+            Ok(0) => block_until(&sub, timeout)?,
+            result => return result,
+        }
+    }
+}
+
+pub fn blocking_send(stream: &OutgoingDatagramStream, mut datagrams: &[OutgoingDatagram]) -> Result<(), ErrorCode> {
+    let timeout = monotonic_clock::subscribe_duration(TIMEOUT_NS);
+
+    while !datagrams.is_empty() {
+        let permit = blocking_check_send(stream, &timeout)?;
+        let chunk_len = datagrams.len().min(permit as usize);
+        match stream.send(&datagrams[..chunk_len]) {
+            Ok(0) => {}
+            Ok(packets_sent) => {
+                let packets_sent = packets_sent as usize;
+                datagrams = &datagrams[packets_sent..];
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    Ok(())
+}
+
+pub fn blocking_receive(stream: &IncomingDatagramStream, count: Range<u64>) -> Result<Vec<IncomingDatagram>, ErrorCode> {
+    let timeout = monotonic_clock::subscribe_duration(TIMEOUT_NS);
+    let pollable = stream.subscribe();
+    let mut datagrams = vec![];
+
+    loop {
+        match stream.receive(count.end - datagrams.len() as u64) {
+            Ok(mut chunk) => {
+                datagrams.append(&mut chunk);
+
+                if datagrams.len() >= count.start as usize {
+                    return Ok(datagrams);
+                } else {
+                    block_until(&pollable, &timeout)?;
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
 }
